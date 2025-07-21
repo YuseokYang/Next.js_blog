@@ -3,4 +3,5 @@ export interface Post {
   title: string;
   content: string;
   username: string;
+  is_pinned?: boolean;
 }

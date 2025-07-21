@@ -6,3 +6,16 @@ const api = axios.create({
 });
 
 export default api;
+
+export const pinPost = async (postId: number, isPinned: boolean, token: string) => {
+  const response = await api.patch(
+    `/posts/${postId}/pin`,
+    { is_pinned: isPinned },
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    }
+  );
+  return response.data;
+};
