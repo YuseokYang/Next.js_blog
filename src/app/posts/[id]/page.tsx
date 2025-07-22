@@ -8,6 +8,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import CommentForm from "@/components/CommentForm";
 import CommentItem from "@/components/CommentItem";
+import sanitizeHtml from "sanitize-html";
 
 interface Comment {
   id: number;
@@ -66,13 +67,32 @@ export default function PostDetailPage() {
   if (isLoading) return <p className="p-4">로딩 중...</p>;
   if (!data) return <p className="p-4 text-red-500">글을 불러올 수 없습니다.</p>;
 
+  // ✅ XSS 방지를 위한 sanitize
+  const sanitizedContent = sanitizeHtml(data.content, {
+    allowedTags: ["b", "i", "em", "strong", "a", "p", "br", "img", "ul", "ol", "li"],
+    allowedAttributes: {
+      a: ["href", "target", "rel"],
+      img: ["src", "alt", "width", "height"],
+    },
+    allowedSchemes: ["http", "https", "data"],
+  });
+
   return (
     <main className="max-w-3xl mx-auto p-4 space-y-6">
       <section className="space-y-2">
         <h1 className="text-2xl font-bold">{data.title}</h1>
-        <div className="bg-gray-100 text-gray-800 rounded p-4 whitespace-pre-wrap leading-relaxed">
-          {data.content}
-        </div>
+        <div
+          className="bg-gray-100 text-gray-800 rounded p-4 leading-relaxed"
+          dangerouslySetInnerHTML={{
+            __html: sanitizeHtml(data.content, {
+              allowedTags: sanitizeHtml.defaults.allowedTags.concat(["img"]),
+              allowedAttributes: {
+                ...sanitizeHtml.defaults.allowedAttributes,
+                img: ["src", "alt", "width", "height"],
+              },
+            }),
+          }}
+        ></div>
         <p className="text-sm text-gray-500">작성자: {data.username}</p>
         {data.is_pinned && (
           <p className="text-sm text-orange-500 font-semibold">📌 공지글</p>
