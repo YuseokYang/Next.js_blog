@@ -8,6 +8,7 @@ import { useAuth } from '@/stores/auth';
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { isTokenExpired } from '@/utils/isTokenExpired';
+import { AxiosError } from 'axios'; // ✅ 추가
 
 interface FormData {
   title: string;
@@ -27,7 +28,7 @@ export default function EditPostPage() {
     } else {
       setIsAuthChecked(true);
     }
-  }, [token]);
+  }, [token, signOut, router]);
 
   const { data, isLoading } = useQuery({
     queryKey: ['post', id],
@@ -60,8 +61,9 @@ export default function EditPostPage() {
       return res.data;
     },
     onSuccess: () => router.push(`/posts/${id}`),
-    onError: (err: any) => {
-      if (err.response?.status === 401 || err.response?.status === 403) {
+    onError: (err: unknown) => {
+      const axiosError = err as AxiosError;
+      if (axiosError.response?.status === 401 || axiosError.response?.status === 403) {
         signOut();
         router.push('/sign-in');
       } else {
