@@ -1,7 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import api from "@/lib/api";
+import { useAuth } from "@/stores/auth";
+import { useRouter } from "next/navigation";
+import { isTokenExpired } from "@/utils/isTokenExpired";
 
 interface CommentFormProps {
   postId: number;
@@ -12,6 +15,18 @@ interface CommentFormProps {
 export default function CommentForm({ postId, token, onSuccess }: CommentFormProps) {
   const [content, setContent] = useState("");
   const [error, setError] = useState("");
+  const { signOut } = useAuth();
+  const router = useRouter();
+  const [isAuthChecked, setIsAuthChecked] = useState(false);
+
+  useEffect(() => {
+    if (!token || isTokenExpired(token)) {
+      signOut();
+      router.push("/sign-in");
+    } else {
+      setIsAuthChecked(true);
+    }
+  }, [token]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -19,7 +34,7 @@ export default function CommentForm({ postId, token, onSuccess }: CommentFormPro
 
     try {
       await api.post(
-        `/comment/${postId}`, // ✅ 여기 수정
+        `/comment/${postId}`,
         { content },
         {
           headers: {
@@ -29,10 +44,17 @@ export default function CommentForm({ postId, token, onSuccess }: CommentFormPro
       );
       setContent("");
       onSuccess();
-    } catch (err) {
+    } catch (err: any) {
+      if (err.response?.status === 401 || err.response?.status === 403) {
+        signOut();
+        router.push("/sign-in");
+        return;
+      }
       setError("댓글 작성에 실패했습니다.");
     }
   };
+
+  if (!isAuthChecked) return null;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-2 mt-4">

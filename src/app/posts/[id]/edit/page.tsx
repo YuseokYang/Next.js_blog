@@ -1,12 +1,13 @@
-"use client";
+'use client';
 
-import { useRouter } from "next/navigation";
-import { useForm } from "react-hook-form";
-import { useQuery, useMutation } from "@tanstack/react-query";
-import api from "@/lib/api";
-import { useAuth } from "@/stores/auth";
-import { useParams } from "next/navigation";
-import { useEffect } from "react";
+import { useRouter } from 'next/navigation';
+import { useForm } from 'react-hook-form';
+import { useQuery, useMutation } from '@tanstack/react-query';
+import api from '@/lib/api';
+import { useAuth } from '@/stores/auth';
+import { useParams } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { isTokenExpired } from '@/utils/isTokenExpired';
 
 interface FormData {
   title: string;
@@ -16,11 +17,30 @@ interface FormData {
 export default function EditPostPage() {
   const { id } = useParams();
   const router = useRouter();
-  const { token, user } = useAuth();
+  const { token, user, signOut } = useAuth();
+  const [isAuthChecked, setIsAuthChecked] = useState(false); // ✅ 진입 토큰 검사용
+
+  // ✅ 페이지 진입 시 토큰 유효성 검사
+  useEffect(() => {
+    if (!token || isTokenExpired(token)) {
+      signOut();
+      router.push('/sign-in');
+    } else {
+      setIsAuthChecked(true);
+    }
+  }, [token]);
 
   const { data, isLoading } = useQuery({
-    queryKey: ["post", id],
-    queryFn: async () => (await api.get(`/posts/${id}`)).data,
+    queryKey: ['post', id],
+    queryFn: async () => {
+      const res = await api.get(`/posts/${id}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      return res.data;
+    },
+    enabled: isAuthChecked, // ✅ 토큰 검사 후에만 실행
   });
 
   const { register, handleSubmit, reset } = useForm<FormData>();
@@ -32,17 +52,29 @@ export default function EditPostPage() {
   }, [data, reset]);
 
   const mutation = useMutation({
-    mutationFn: async (formData: FormData) =>
-      (await api.put(`/posts/${id}`, formData, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      })).data,
+    mutationFn: async (formData: FormData) => {
+      try {
+        const res = await api.put(`/posts/${id}`, formData, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        return res.data;
+      } catch (err: any) {
+        if (err.response?.status === 401 || err.response?.status === 403) {
+          signOut();
+          router.push('/sign-in');
+        }
+        throw err;
+      }
+    },
     onSuccess: () => router.push(`/posts/${id}`),
   });
 
   const onSubmit = (formData: FormData) => mutation.mutate(formData);
 
+  // ✅ 인증 검사 안 끝났으면 아무것도 안 보여줌
+  if (!isAuthChecked) return null;
   if (isLoading) return <p className="p-4">로딩 중...</p>;
   if (!data || data.username !== user?.sub) return <p className="p-4 text-red-500">수정 권한이 없습니다.</p>;
 
@@ -53,12 +85,12 @@ export default function EditPostPage() {
         <input
           type="text"
           placeholder="제목"
-          {...register("title", { required: true })}
+          {...register('title', { required: true })}
           className="w-full p-2 border rounded"
         />
         <textarea
           placeholder="내용"
-          {...register("content", { required: true })}
+          {...register('content', { required: true })}
           className="w-full p-2 border rounded h-40"
         />
         <button

@@ -67,14 +67,17 @@ export default function PostDetailPage() {
   if (isLoading) return <p className="p-4">로딩 중...</p>;
   if (!data) return <p className="p-4 text-red-500">글을 불러올 수 없습니다.</p>;
 
-  // ✅ XSS 방지를 위한 sanitize
+  // ✅ sanitize: Cloudinary 이미지 포함한 본문 처리
   const sanitizedContent = sanitizeHtml(data.content, {
-    allowedTags: ["b", "i", "em", "strong", "a", "p", "br", "img", "ul", "ol", "li"],
-    allowedAttributes: {
-      a: ["href", "target", "rel"],
-      img: ["src", "alt", "width", "height"],
-    },
-    allowedSchemes: ["http", "https", "data"],
+  allowedTags: ["b", "i", "em", "strong", "a", "p", "br", "img", "ul", "ol", "li"],
+  allowedAttributes: {
+    a: ["href", "target", "rel"],
+    img: ["src", "alt", "width", "height"],
+  },
+  allowedSchemes: ["http", "https", "data"],
+  allowedSchemesByTag: {
+    img: ["https", "http", "data"],
+  },
   });
 
   return (
@@ -83,15 +86,7 @@ export default function PostDetailPage() {
         <h1 className="text-2xl font-bold">{data.title}</h1>
         <div
           className="bg-gray-100 text-gray-800 rounded p-4 leading-relaxed"
-          dangerouslySetInnerHTML={{
-            __html: sanitizeHtml(data.content, {
-              allowedTags: sanitizeHtml.defaults.allowedTags.concat(["img"]),
-              allowedAttributes: {
-                ...sanitizeHtml.defaults.allowedAttributes,
-                img: ["src", "alt", "width", "height"],
-              },
-            }),
-          }}
+          dangerouslySetInnerHTML={{ __html: sanitizedContent }}
         ></div>
         <p className="text-sm text-gray-500">작성자: {data.username}</p>
         {data.is_pinned && (
@@ -105,10 +100,8 @@ export default function PostDetailPage() {
           <button
             onClick={handlePinToggle}
             className={`px-4 py-2 rounded ${
-              data.is_pinned
-                ? "bg-red-500 text-white"
-                : "bg-blue-600 text-white"
-            }`}
+              data.is_pinned ? "bg-red-500" : "bg-blue-600"
+            } text-white`}
           >
             {data.is_pinned ? "공지 해제" : "공지로 설정"}
           </button>

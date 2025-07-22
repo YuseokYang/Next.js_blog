@@ -1,8 +1,10 @@
-// components/CommentItem.tsx
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { updateComment, deleteComment } from "@/lib/comment";
+import { useAuth } from "@/stores/auth";
+import { useRouter } from "next/navigation";
+import { isTokenExpired } from "@/utils/isTokenExpired";
 
 interface CommentItemProps {
   comment: {
@@ -13,20 +15,37 @@ interface CommentItemProps {
   };
   currentUsername: string;
   token: string;
-  onChange: () => void; // 댓글 목록 갱신용
+  onChange: () => void;
 }
 
 export default function CommentItem({ comment, currentUsername, token, onChange }: CommentItemProps) {
   const [editing, setEditing] = useState(false);
   const [content, setContent] = useState(comment.content);
   const [error, setError] = useState("");
+  const { signOut } = useAuth();
+  const router = useRouter();
+  const [isAuthChecked, setIsAuthChecked] = useState(false);
+
+  useEffect(() => {
+    if (!token || isTokenExpired(token)) {
+      signOut();
+      router.push("/sign-in");
+    } else {
+      setIsAuthChecked(true);
+    }
+  }, [token]);
 
   const handleUpdate = async () => {
     try {
       await updateComment(comment.id, content, token);
       setEditing(false);
       onChange();
-    } catch {
+    } catch (err: any) {
+      if (err.response?.status === 401 || err.response?.status === 403) {
+        signOut();
+        router.push("/sign-in");
+        return;
+      }
       setError("댓글 수정 실패");
     }
   };
@@ -36,10 +55,17 @@ export default function CommentItem({ comment, currentUsername, token, onChange 
     try {
       await deleteComment(comment.id, token);
       onChange();
-    } catch {
+    } catch (err: any) {
+      if (err.response?.status === 401 || err.response?.status === 403) {
+        signOut();
+        router.push("/sign-in");
+        return;
+      }
       setError("댓글 삭제 실패");
     }
   };
+
+  if (!isAuthChecked) return null;
 
   const isOwner = currentUsername === comment.username;
 
@@ -73,16 +99,10 @@ export default function CommentItem({ comment, currentUsername, token, onChange 
           <p className="text-sm text-gray-500">작성자: {comment.username}</p>
           {isOwner && (
             <div className="space-x-2">
-              <button
-                onClick={() => setEditing(true)}
-                className="text-sm text-blue-500"
-              >
+              <button onClick={() => setEditing(true)} className="text-sm text-blue-500">
                 수정
               </button>
-              <button
-                onClick={handleDelete}
-                className="text-sm text-red-500"
-              >
+              <button onClick={handleDelete} className="text-sm text-red-500">
                 삭제
               </button>
             </div>
