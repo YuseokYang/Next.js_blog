@@ -18,9 +18,8 @@ export default function EditPostPage() {
   const { id } = useParams();
   const router = useRouter();
   const { token, user, signOut } = useAuth();
-  const [isAuthChecked, setIsAuthChecked] = useState(false); // ✅ 진입 토큰 검사용
+  const [isAuthChecked, setIsAuthChecked] = useState(false);
 
-  // ✅ 페이지 진입 시 토큰 유효성 검사
   useEffect(() => {
     if (!token || isTokenExpired(token)) {
       signOut();
@@ -40,7 +39,7 @@ export default function EditPostPage() {
       });
       return res.data;
     },
-    enabled: isAuthChecked, // ✅ 토큰 검사 후에만 실행
+    enabled: isAuthChecked,
   });
 
   const { register, handleSubmit, reset } = useForm<FormData>();
@@ -53,30 +52,32 @@ export default function EditPostPage() {
 
   const mutation = useMutation({
     mutationFn: async (formData: FormData) => {
-      try {
-        const res = await api.put(`/posts/${id}`, formData, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-        return res.data;
-      } catch (err: any) {
-        if (err.response?.status === 401 || err.response?.status === 403) {
-          signOut();
-          router.push('/sign-in');
-        }
-        throw err;
-      }
+      const res = await api.put(`/posts/${id}`, formData, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      return res.data;
     },
     onSuccess: () => router.push(`/posts/${id}`),
+    onError: (err: any) => {
+      if (err.response?.status === 401 || err.response?.status === 403) {
+        signOut();
+        router.push('/sign-in');
+      } else {
+        alert('글 수정 중 오류가 발생했습니다.');
+      }
+    },
   });
 
-  const onSubmit = (formData: FormData) => mutation.mutate(formData);
+  const onSubmit = (formData: FormData) => {
+    mutation.mutate(formData);
+  };
 
-  // ✅ 인증 검사 안 끝났으면 아무것도 안 보여줌
   if (!isAuthChecked) return null;
   if (isLoading) return <p className="p-4">로딩 중...</p>;
-  if (!data || data.username !== user?.sub) return <p className="p-4 text-red-500">수정 권한이 없습니다.</p>;
+  if (!data || data.username !== user?.sub)
+    return <p className="p-4 text-red-500">수정 권한이 없습니다.</p>;
 
   return (
     <main className="max-w-2xl mx-auto p-4">

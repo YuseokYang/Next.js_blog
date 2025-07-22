@@ -5,6 +5,7 @@ import { updateComment, deleteComment } from "@/lib/comment";
 import { useAuth } from "@/stores/auth";
 import { useRouter } from "next/navigation";
 import { isTokenExpired } from "@/utils/isTokenExpired";
+import axios from "axios"; // ❗ axios.isAxiosError 사용을 위한 import
 
 interface CommentItemProps {
   comment: {
@@ -18,7 +19,12 @@ interface CommentItemProps {
   onChange: () => void;
 }
 
-export default function CommentItem({ comment, currentUsername, token, onChange }: CommentItemProps) {
+export default function CommentItem({
+  comment,
+  currentUsername,
+  token,
+  onChange,
+}: CommentItemProps) {
   const [editing, setEditing] = useState(false);
   const [content, setContent] = useState(comment.content);
   const [error, setError] = useState("");
@@ -33,18 +39,20 @@ export default function CommentItem({ comment, currentUsername, token, onChange 
     } else {
       setIsAuthChecked(true);
     }
-  }, [token]);
+  }, [token, signOut, router]); // ✅ 의존성 누락 보완
 
   const handleUpdate = async () => {
     try {
       await updateComment(comment.id, content, token);
       setEditing(false);
       onChange();
-    } catch (err: any) {
-      if (err.response?.status === 401 || err.response?.status === 403) {
-        signOut();
-        router.push("/sign-in");
-        return;
+    } catch (err) {
+      if (axios.isAxiosError(err)) {
+        if (err.response?.status === 401 || err.response?.status === 403) {
+          signOut();
+          router.push("/sign-in");
+          return;
+        }
       }
       setError("댓글 수정 실패");
     }
@@ -55,11 +63,13 @@ export default function CommentItem({ comment, currentUsername, token, onChange 
     try {
       await deleteComment(comment.id, token);
       onChange();
-    } catch (err: any) {
-      if (err.response?.status === 401 || err.response?.status === 403) {
-        signOut();
-        router.push("/sign-in");
-        return;
+    } catch (err) {
+      if (axios.isAxiosError(err)) {
+        if (err.response?.status === 401 || err.response?.status === 403) {
+          signOut();
+          router.push("/sign-in");
+          return;
+        }
       }
       setError("댓글 삭제 실패");
     }
@@ -99,10 +109,16 @@ export default function CommentItem({ comment, currentUsername, token, onChange 
           <p className="text-sm text-gray-500">작성자: {comment.username}</p>
           {isOwner && (
             <div className="space-x-2">
-              <button onClick={() => setEditing(true)} className="text-sm text-blue-500">
+              <button
+                onClick={() => setEditing(true)}
+                className="text-sm text-blue-500"
+              >
                 수정
               </button>
-              <button onClick={handleDelete} className="text-sm text-red-500">
+              <button
+                onClick={handleDelete}
+                className="text-sm text-red-500"
+              >
                 삭제
               </button>
             </div>

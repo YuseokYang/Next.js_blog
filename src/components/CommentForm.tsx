@@ -1,3 +1,4 @@
+// src/components/CommentForm.tsx
 "use client";
 
 import { useState, useEffect } from "react";
@@ -5,6 +6,7 @@ import api from "@/lib/api";
 import { useAuth } from "@/stores/auth";
 import { useRouter } from "next/navigation";
 import { isTokenExpired } from "@/utils/isTokenExpired";
+import axios from "axios"; // ✅ 추가: axios.isAxiosError 사용
 
 interface CommentFormProps {
   postId: number;
@@ -26,7 +28,7 @@ export default function CommentForm({ postId, token, onSuccess }: CommentFormPro
     } else {
       setIsAuthChecked(true);
     }
-  }, [token]);
+  }, [token, signOut, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -44,11 +46,13 @@ export default function CommentForm({ postId, token, onSuccess }: CommentFormPro
       );
       setContent("");
       onSuccess();
-    } catch (err: any) {
-      if (err.response?.status === 401 || err.response?.status === 403) {
-        signOut();
-        router.push("/sign-in");
-        return;
+    } catch (err) {
+      if (axios.isAxiosError(err)) {
+        if (err.response?.status === 401 || err.response?.status === 403) {
+          signOut();
+          router.push("/sign-in");
+          return;
+        }
       }
       setError("댓글 작성에 실패했습니다.");
     }
