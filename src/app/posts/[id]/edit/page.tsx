@@ -1,14 +1,14 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import api from '@/lib/api';
 import { useAuth } from '@/stores/auth';
-import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { isTokenExpired } from '@/utils/isTokenExpired';
-import { AxiosError } from 'axios'; // ✅ 추가
+import sanitizeHtml from 'sanitize-html';
+import { AxiosError } from 'axios';
 
 interface FormData {
   title: string;
@@ -20,6 +20,11 @@ export default function EditPostPage() {
   const router = useRouter();
   const { token, user, signOut } = useAuth();
   const [isAuthChecked, setIsAuthChecked] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [selectedFileName, setSelectedFileName] = useState('');
+  const [previewUrl, setPreviewUrl] = useState('');
+
+  const { register, handleSubmit, reset, setValue, getValues } = useForm<FormData>();
 
   useEffect(() => {
     if (!token || isTokenExpired(token)) {
@@ -34,16 +39,12 @@ export default function EditPostPage() {
     queryKey: ['post', id],
     queryFn: async () => {
       const res = await api.get(`/posts/${id}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
       });
       return res.data;
     },
     enabled: isAuthChecked,
   });
-
-  const { register, handleSubmit, reset } = useForm<FormData>();
 
   useEffect(() => {
     if (data) {
@@ -54,9 +55,7 @@ export default function EditPostPage() {
   const mutation = useMutation({
     mutationFn: async (formData: FormData) => {
       const res = await api.put(`/posts/${id}`, formData, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
       });
       return res.data;
     },
@@ -74,6 +73,51 @@ export default function EditPostPage() {
 
   const onSubmit = (formData: FormData) => {
     mutation.mutate(formData);
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setSelectedFileName(file.name);
+    setPreviewUrl(URL.createObjectURL(file));
+    setIsUploading(true);
+
+    try {
+      const imageUrl = await uploadImageToServer(file);
+      if (!imageUrl.startsWith('http')) {
+        alert('올바르지 않은 이미지 URL입니다.');
+        return;
+      }
+
+      const imageTag = sanitizeHtml(`<img src="${imageUrl}" alt="image" />`, {
+        allowedTags: ['img'],
+        allowedAttributes: { img: ['src', 'alt'] },
+        allowedSchemes: ['https'],
+      });
+
+      const currentContent = getValues('content') || '';
+      setValue('content', `${currentContent}\n${imageTag}\n`);
+    } catch (err) {
+      console.error('이미지 업로드 실패:', err);
+      alert('이미지 업로드에 실패했습니다.');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const uploadImageToServer = async (file: File): Promise<string> => {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const res = await api.post('/posts/upload/image', formData, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+
+    return res.data.url;
   };
 
   if (!isAuthChecked) return null;
@@ -96,11 +140,43 @@ export default function EditPostPage() {
           {...register('content', { required: true })}
           className="w-full p-2 border rounded h-40"
         />
+
+        {/* 이미지 업로드 UI */}
+        <div>
+          <label className="block mb-1 font-medium">이미지 업로드</label>
+          <div className="flex items-center space-x-4">
+            <label className="bg-blue-600 text-white px-4 py-2 rounded cursor-pointer hover:bg-blue-700">
+              이미지 선택
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleImageUpload}
+                disabled={isUploading}
+                className="hidden"
+              />
+            </label>
+            {selectedFileName && <span className="text-sm text-gray-700">{selectedFileName}</span>}
+          </div>
+          {previewUrl && (
+            <div className="mt-3">
+              <img
+                src={previewUrl}
+                alt="preview"
+                className="max-w-xs rounded border"
+              />
+            </div>
+          )}
+          {isUploading && (
+            <p className="text-sm text-gray-500 mt-2">이미지 업로드 중...</p>
+          )}
+        </div>
+
         <button
           type="submit"
           className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+          disabled={mutation.isPending}
         >
-          수정하기
+          {mutation.isPending ? '수정 중...' : '수정하기'}
         </button>
       </form>
     </main>

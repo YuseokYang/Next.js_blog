@@ -7,8 +7,7 @@ import { useRouter } from 'next/navigation';
 import api from '@/lib/api';
 import { useAuth } from '@/stores/auth';
 import { isTokenExpired } from '@/utils/isTokenExpired';
-import sanitizeHtml from "sanitize-html"; // 꼭 상단에 추가
-
+import sanitizeHtml from 'sanitize-html';
 
 interface FormData {
   title: string;
@@ -20,9 +19,12 @@ export default function NewPostPage() {
   const { register, handleSubmit, setValue, getValues, reset } = useForm<FormData>();
   const { token, signOut } = useAuth();
   const [isUploading, setIsUploading] = useState(false);
-  const [isAuthChecked, setIsAuthChecked] = useState(false); // 🔒 진입 인증 완료 여부
+  const [isAuthChecked, setIsAuthChecked] = useState(false);
 
-  // 🔐 페이지 진입 시 토큰 만료 확인
+  // ✅ 이미지 업로드용 상태
+  const [selectedFileName, setSelectedFileName] = useState<string>('');
+  const [previewUrl, setPreviewUrl] = useState<string>('');
+
   useEffect(() => {
     if (!token || isTokenExpired(token)) {
       signOut();
@@ -42,62 +44,66 @@ export default function NewPostPage() {
     },
     onSuccess: () => {
       reset();
+      setSelectedFileName('');
+      setPreviewUrl('');
       router.push('/');
     },
   });
 
   const onSubmit = (data: FormData) => mutate(data);
 
- 
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-  const file = e.target.files?.[0];
-  if (!file) return;
-
-  const formData = new FormData();
-  formData.append("file", file);
-
-  try {
+    setSelectedFileName(file.name);
+    setPreviewUrl(URL.createObjectURL(file));
     setIsUploading(true);
 
-    const res = await api.post("/posts/upload/image", formData, {
+    try {
+      const imageUrl = await uploadImageToServer(file);
+
+      if (!isValidImageUrl(imageUrl)) {
+        alert('올바르지 않은 이미지 URL입니다.');
+        return;
+      }
+
+      insertImageToContent(imageUrl);
+    } catch (err) {
+      console.error('이미지 업로드 실패:', err);
+      alert('이미지 업로드에 실패했습니다.');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const uploadImageToServer = async (file: File): Promise<string> => {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const res = await api.post('/posts/upload/image', formData, {
       headers: {
         Authorization: `Bearer ${token}`,
-        "Content-Type": "multipart/form-data",
+        'Content-Type': 'multipart/form-data',
       },
     });
 
-    const imageUrl: string = res.data.url;
+    return res.data.url;
+  };
 
-    console.log("✅ imageUrl:", imageUrl);
+  const isValidImageUrl = (url: string): boolean => url.startsWith('http');
 
-    // Cloudinary URL이 절대경로로 올바르게 들어왔는지 확인
-    if (!imageUrl.startsWith("http")) {
-      alert("올바르지 않은 이미지 URL입니다.");
-      return;
-    }
-
-    // sanitizeHtml 사용: src 앞에 / 없이 정확한 절대 URL만 허용
-    const imageTag = sanitizeHtml(`<img src="${imageUrl}" alt="image" />`, {
-      allowedTags: ["img"],
-      allowedAttributes: { img: ["src", "alt"] },
-      allowedSchemes: ["https"],
+  const insertImageToContent = (url: string) => {
+    const imageTag = sanitizeHtml(`<img src="${url}" alt="image" />`, {
+      allowedTags: ['img'],
+      allowedAttributes: { img: ['src', 'alt'] },
+      allowedSchemes: ['https'],
     });
 
-    // 기존 본문에 이미지 삽입
-    const currentContent = getValues("content") || "";
-    setValue("content", `${currentContent}\n${imageTag}\n`);
-  } catch (err) {
-    alert("이미지 업로드에 실패했습니다.");
-    console.error(err);
-  } finally {
-    setIsUploading(false);
-  }
-};
+    const currentContent = getValues('content') || '';
+    setValue('content', `${currentContent}\n${imageTag}\n`);
+  };
 
-
-
-  // 🔐 인증 확인 전에는 아무것도 렌더링하지 않음
   if (!isAuthChecked) return null;
 
   return (
@@ -113,6 +119,7 @@ const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
             placeholder="제목을 입력하세요"
           />
         </div>
+
         <div>
           <label className="block mb-1">내용</label>
           <textarea
@@ -123,19 +130,44 @@ const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         </div>
 
         <div>
-          <label className="block mb-1">이미지 업로드</label>
-          <input
-            type="file"
-            accept="image/*"
-            onChange={handleImageUpload}
-            disabled={isUploading}
-          />
-          {isUploading && <p className="text-sm text-gray-500 mt-1">이미지 업로드 중...</p>}
+          <label className="block mb-1 font-medium">이미지 업로드</label>
+
+          <div className="flex items-center space-x-4">
+            <label className="bg-blue-600 text-white px-4 py-2 rounded cursor-pointer hover:bg-blue-700">
+              이미지 선택
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleImageUpload}
+                disabled={isUploading}
+                className="hidden"
+              />
+            </label>
+
+            {selectedFileName && (
+              <span className="text-sm text-gray-700">{selectedFileName}</span>
+            )}
+          </div>
+
+          {previewUrl && (
+            <div className="mt-3">
+              <img
+                src={previewUrl}
+                alt="preview"
+                className="max-w-xs rounded border"
+              />
+            </div>
+          )}
+
+          {isUploading && (
+            <p className="text-sm text-gray-500 mt-2">이미지 업로드 중...</p>
+          )}
         </div>
 
         {error && (
           <p className="text-red-500 text-sm">오류가 발생했습니다. 다시 시도해주세요.</p>
         )}
+
         <button
           type="submit"
           disabled={isPending}
